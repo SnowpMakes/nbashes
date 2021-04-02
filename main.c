@@ -156,7 +156,7 @@ int main(int argc, char *argv[])
     char *options[MAXOPTIONS];
     for(int i = 0; i < argc - 2; i++) options[i] = argv[i + 2];
 
-    int WIDTH = strlen(argv[1]);
+    int WIDTH = (int)strlen(argv[1]);
     for(int i = 0; i < argc - 2; i++) WIDTH = max(WIDTH, strlen(options[i]) + 4);
     WIDTH = max(WIDTH, 30);
     WIDTH += (XPAD * 2);
