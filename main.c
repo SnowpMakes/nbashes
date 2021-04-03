@@ -1,23 +1,12 @@
+#include <locale.h>
 #include <curses.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define CGA_BLACK 0
-#define CGA_BLUE 1
-#define CGA_GREEN 2
-#define CGA_CYAN 3
-#define CGA_RED 4
-#define CGA_MAGENTA 5
-#define CGA_YELLOW 6
-#define CGA_WHITE 7
-#define CGA_H_BLACK 8
-#define CGA_H_BLUE 9
-#define CGA_H_GREEN 10
-#define CGA_H_CYAN 11
-#define CGA_H_RED 12
-#define CGA_H_MAGENTA 13
-#define CGA_H_YELLOW 14
-#define CGA_H_WHITE 15
+#define BACKGROUND 1
+#define FOREGROUND 2
+#define SHADOW 3
+#define SELECTED 4
 
 #define max(a,b) \
    ({ __typeof__ (a) _a = (a); \
@@ -32,83 +21,6 @@
 typedef unsigned int uint;
 typedef unsigned char uchar;
 
-
-short curs_color(int fg)
-{
-    switch (7 & fg) {           /* RGB */
-        case 0:                     /* 000 */
-            return (COLOR_BLACK);
-        case 1:                     /* 001 */
-            return (COLOR_BLUE);
-        case 2:                     /* 010 */
-            return (COLOR_GREEN);
-        case 3:                     /* 011 */
-            return (COLOR_CYAN);
-        case 4:                     /* 100 */
-            return (COLOR_RED);
-        case 5:                     /* 101 */
-            return (COLOR_MAGENTA);
-        case 6:                     /* 110 */
-            return (COLOR_YELLOW);
-        case 7:                     /* 111 */
-            return (COLOR_WHITE);
-    }
-}
-
-int colornum(int fg, int bg)
-{
-    int B, bbb, ffff;
-
-    B = 1 << 7;
-    bbb = (7 & bg) << 4;
-    ffff = 7 & fg;
-
-    return (B | bbb | ffff);
-}
-
-void init_colorpairs(void)
-{
-    int fg, bg;
-    int colorpair;
-
-    for (bg = 0; bg <= 7; bg++) {
-        for (fg = 0; fg <= 7; fg++) {
-            colorpair = colornum(fg, bg);
-            init_pair(colorpair, curs_color(fg), curs_color(bg));
-        }
-    }
-}
-
-int is_bold(int fg)
-{
-    /* return the intensity bit */
-
-    int i;
-
-    i = 1 << 3;
-    return (i & fg);
-}
-
-void setcolor(int fg, int bg)
-{
-    /* set the color pair (colornum) and bold/bright (A_BOLD) */
-
-    attron(COLOR_PAIR(colornum(fg, bg)));
-    if (is_bold(fg)) {
-        attron(A_BOLD);
-    }
-}
-
-void unsetcolor(int fg, int bg)
-{
-    /* unset the color pair (colornum) and
-       bold/bright (A_BOLD) */
-
-    attroff(COLOR_PAIR(colornum(fg, bg)));
-    if (is_bold(fg)) {
-        attroff(A_BOLD);
-    }
-}
 
 char* itoa(int val, int base)
 {
@@ -133,10 +45,10 @@ int main(int argc, char *argv[])
 
     /* initialize curses */
 
-
+    setlocale(LC_ALL, "");
     initscr();
     cbreak();
-    //noecho();
+    noecho();
 
     if (has_colors() == FALSE) {
         endwin();
@@ -145,13 +57,17 @@ int main(int argc, char *argv[])
     }
 
     start_color();
-    init_colorpairs();
+    init_pair(BACKGROUND, COLOR_BLUE, COLOR_BLUE);
+    init_pair(FOREGROUND, COLOR_BLACK, COLOR_WHITE);
+    init_pair(SHADOW, COLOR_BLACK, COLOR_BLACK);
+    init_pair(SELECTED, COLOR_WHITE, COLOR_BLUE);
     keypad(stdscr, TRUE);
 
     clear();
-    setcolor(CGA_H_WHITE, CGA_BLUE);
+    attron(COLOR_PAIR(BACKGROUND));
     for(int y = 0; y < LINES; y++) for(int x = 0; x < COLS; x++) mvaddch(y, x, ' ');
-    unsetcolor(CGA_H_WHITE, CGA_BLUE);
+    attroff(COLOR_PAIR(BACKGROUND));
+
 
     char *options[MAXOPTIONS];
     for(int i = 0; i < argc - 2; i++) options[i] = argv[i + 2];
@@ -169,21 +85,43 @@ int main(int argc, char *argv[])
     if(LINES % 2 == 0) ROWSTART--;
 
 
-    setcolor(CGA_BLACK, CGA_BLACK);
+    attron(COLOR_PAIR(SHADOW));
     for (int y = ROWSTART; y < ROWSTART + HEIGHT; y++)
         for (int x = COLSTART; x < COLSTART + WIDTH; x++)
             mvaddch(y + 1, x + 1, ' ');
-    unsetcolor(CGA_BLACK, CGA_BLACK);
+    attroff(COLOR_PAIR(SHADOW));
 
 
     bool stop = false;
     uchar choice = 0;
     while(!stop)
     {
-        setcolor(CGA_BLACK, CGA_WHITE);
+        attron(COLOR_PAIR(FOREGROUND));
         for (int y = ROWSTART; y < ROWSTART + HEIGHT; y++)
+        {
             for (int x = COLSTART; x < COLSTART + WIDTH; x++)
-                mvaddch(y, x, ' ');
+            {
+                bool yStart = y == ROWSTART;
+                bool yEnd = y == ROWSTART + HEIGHT - 1;
+                bool xStart = x == COLSTART;
+                bool xEnd = x == COLSTART + WIDTH - 1;
+                if(yStart)
+                {
+                    if(xStart) mvaddstr(y, x, "┌");
+                    else if(xEnd) mvaddstr(y, x, "┐");
+                    else mvaddstr(y, x, "─");
+                }
+                else if(yEnd)
+                {
+                    if(xStart) mvaddstr(y, x, "└");
+                    else if(xEnd) mvaddstr(y, x, "┘");
+                    else mvaddstr(y, x, "─");
+                }
+                else if(xStart || xEnd) mvaddstr(y, x, "│");
+                else mvaddch(y, x, ' ');
+            }
+        }
+
         mvaddstr(ROWSTART + YPAD, COLSTART + XPAD, argv[1]);
 
         char num[4];
@@ -193,14 +131,14 @@ int main(int argc, char *argv[])
             mvaddstr(ROWSTART + YPAD + y + 2, COLSTART + XPAD, strcat(num, "."));
             mvaddstr(ROWSTART + YPAD + y + 2, COLSTART + XPAD + 4, options[y]);
         }
-        unsetcolor(CGA_BLACK, CGA_WHITE);
+        attroff(COLOR_PAIR(FOREGROUND));
 
-        setcolor(CGA_WHITE, CGA_BLUE);
+        attron(COLOR_PAIR(SELECTED));
         strcpy(num, itoa(choice + 1, 10));
         for(int x = COLSTART + XPAD; x < COLSTART + WIDTH - XPAD; x++) mvaddch(ROWSTART + YPAD + choice + 2, x, ' ');
         mvaddstr(ROWSTART + YPAD + choice + 2, COLSTART + XPAD, strcat(num, "."));
         mvaddstr(ROWSTART + YPAD + choice + 2, COLSTART + XPAD + 4, options[choice]);
-        unsetcolor(CGA_WHITE, CGA_BLUE);
+        attroff(COLOR_PAIR(SELECTED));
 
         move(0, 0);
         refresh();
@@ -222,8 +160,6 @@ int main(int argc, char *argv[])
     //getch();
     endwin();
 
-    printf("%hhu", choice);
-
-    exit(0);
+    exit(choice);
 
 }
